@@ -1,4 +1,4 @@
-from flask_restful import Api, Resource, reqparse, abort, fields, marshal_with
+from flask_restful import Api, Resource, fields, marshal_with
 from stocklab.db_handler.mongodb_handler import MongoDBHandler
 from flask import Flask, request
 from flask_cors import CORS
@@ -11,9 +11,6 @@ api = Api(app)
 mongodb = MongoDBHandler()
 
 
-"""
-response fields for code
-"""
 code_hname_to_eng = {
     "단축코드": "code",
     "확자코드": "extend_code",
@@ -25,7 +22,22 @@ code_hname_to_eng = {
 }
 
 
-# Schema for Code Marshal (Full Version)
+price_hname_to_eng = {
+    "날짜": "date",
+    "종가": "close",
+    "시가": "open",
+    "고가": "high",
+    "저가": "low",
+    "전일대비": "diff",
+    "전일대비구분": "diff_type"
+}
+
+
+"""
+response fields for code
+"""
+# Schema to marshal code_info to code_fields (Full Version)
+# "uri" is used by return
 code_fields = {
     "code": fields.String,
     "extend_code": fields.String,
@@ -38,6 +50,20 @@ code_fields = {
 }
 
 
+# /codes/<code>
+class Code(Resource):
+
+    @marshal_with(code_fields)
+    def get(self, code):
+        result = mongodb.findOne({"단축코드": code}, "stocklab", "code_info")
+        # if result is None:
+        if not result:
+            return {}, 404
+        # code_info = {}
+        code_info = {code_hname_to_eng[field]: result[field] for field in result.keys() if field in code_hname_to_eng}
+        return code_info
+
+
 # Schema for CodeList (Short Version)
 code_short_fields = {
     "code": fields.String,
@@ -45,7 +71,8 @@ code_short_fields = {
 }
 
 
-# Schema for CodeList Marshal (Short Version)
+# Schema to marshal code_list to code_list_fields (Short Version)
+# "uri" is used by return
 code_list_fields = {
     "count": fields.Integer,
     # "code_list": fields.List(fields.Nested(code_fields)),      # Full Version
@@ -75,34 +102,9 @@ class CodeList(Resource):
         return {"code_list": result_list, "count": len(result_list)}, 200
 
 
-# /codes/<code>
-class Code(Resource):
-
-    @marshal_with(code_fields)
-    def get(self, code):
-        result = mongodb.findOne({"단축코드": code}, "stocklab", "code_info")
-        # if result is None:
-        if not result:
-            return {}, 404
-        # code_info = {}
-        code_info = {code_hname_to_eng[field]: result[field] for field in result.keys() if field in code_hname_to_eng}
-        return code_info
-
-
 """
-response fields for price
+response fields for price(s)
 """
-price_hname_to_eng = {
-    "날짜": "date",
-    "종가": "close",
-    "시가": "open",
-    "고가": "high",
-    "저가": "low",
-    "전일대비": "diff",
-    "전일대비구분": "diff_type"
-}
-
-
 # Schema for Price (Full Version)
 price_fields = {
     "date": fields.String,
@@ -116,7 +118,8 @@ price_fields = {
 }
 
 
-# Schema for Price Marshal (Full Version)
+# Schema to marshal price_info_list to price_list_fields (Full Version)
+# json is used by return
 price_list_fields = {
     "count": fields.Integer,
     "price_list": fields.List(fields.Nested(price_fields))
@@ -148,8 +151,8 @@ class Price(Resource):
 """
 response fields for orders
 """
-# Schema for OrderList (Marshal)
-# N/A
+# Schema to marshal OrderList to N/A
+# json is used by return
 
 
 # /orders?status=all
@@ -169,12 +172,14 @@ class OrderList(Resource):
         return {"count": len(result_list), "order_list": result_list}, 200
 
 
-api.add_resource(CodeList, "/codes", endpoint="codes")
-api.add_resource(Code, "/codes/<string:code>", endpoint="code")
-api.add_resource(Price, "/codes/<string:code>/price", endpoint="price")
-api.add_resource(OrderList, "/orders", endpoint="orders")
+# for a class
+api.add_resource(CodeList,  "/codes",                     endpoint="codes")   # endpoint: code_list_fields  -> codes
+api.add_resource(Code,      "/codes/<string:code>",       endpoint="code")    # endpoint: code_fields       -> code
+api.add_resource(Price,     "/codes/<string:code>/price", endpoint="price")   # endpoint: json              -> price
+api.add_resource(OrderList, "/orders",                    endpoint="orders")  # endpoint: json              -> orders
 
 
+# for a method
 @app.route("/")
 def hello():
     return "Hello World!"
